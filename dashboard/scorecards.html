@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pain Point Scorecards - Market Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-gradient-to-r from-purple-600 to-blue-600 text-white shadow-lg">
+            <div class="max-w-7xl mx-auto px-6 py-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-bold">📊 Extraction Scorecards</h1>
+                        <p class="text-purple-100 mt-1">Track and analyze pain point extraction sessions</p>
+                    </div>
+                    <div class="flex gap-3">
+                        <a href="index.html" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+                            ← Main Dashboard
+                        </a>
+                        <button onclick="refreshSessions()" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-6 py-8">
+            <!-- Sessions List -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6">📋 Extraction Sessions</h2>
+
+                <div id="sessionsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Sessions will be loaded here -->
+                    <div class="text-center py-8 col-span-full text-gray-500">
+                        Loading sessions...
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Scorecard Detail Modal -->
+    <div id="scorecardModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h3 class="text-3xl font-bold text-gray-900" id="scorecardTitle">Scorecard</h3>
+                    <p class="text-gray-600 mt-1" id="scorecardDate"></p>
+                </div>
+                <button onclick="closeScorecardModal()" class="text-gray-400 hover:text-gray-600 text-3xl font-bold leading-none">&times;</button>
+            </div>
+
+            <!-- Summary Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                    <div class="text-blue-600 text-sm font-medium mb-1">Total Pain Points</div>
+                    <div class="text-3xl font-bold text-blue-900" id="scorecardTotal">0</div>
+                </div>
+                <div class="bg-gradient-to-br from-purple-50 to-purple-100 rounded-lg p-4 border border-purple-200">
+                    <div class="text-purple-600 text-sm font-medium mb-1">Items Analyzed</div>
+                    <div class="text-3xl font-bold text-purple-900" id="scorecardAnalyzed">0</div>
+                </div>
+                <div class="bg-gradient-to-br from-green-50 to-green-100 rounded-lg p-4 border border-green-200">
+                    <div class="text-green-600 text-sm font-medium mb-1">Avg Opportunity</div>
+                    <div class="text-3xl font-bold text-green-900" id="scorecardAvgScore">0</div>
+                </div>
+                <div class="bg-gradient-to-br from-red-50 to-red-100 rounded-lg p-4 border border-red-200">
+                    <div class="text-red-600 text-sm font-medium mb-1">Critical/High</div>
+                    <div class="text-3xl font-bold text-red-900" id="scorecardCritical">0</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-gray-50 rounded-lg p-6">
+                    <h4 class="text-lg font-semibold text-gray-900 mb-4">Category Breakdown</h4>
+                    <canvas id="categoryChartModal"></canvas>
+                </div>
+                <div class="bg-gray-50 rounded-lg p-6">
+                    <h4 class="text-lg font-semibold text-gray-900 mb-4">Severity Distribution</h4>
+                    <canvas id="severityChartModal"></canvas>
+                </div>
+            </div>
+
+            <!-- Top Opportunities -->
+            <div>
+                <h4 class="text-xl font-semibold text-gray-900 mb-4">🎯 Top Opportunities</h4>
+                <div id="topOpportunities" class="space-y-3">
+                    <!-- Top opportunities will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let sessions = [];
+        let categoryChartModal, severityChartModal;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            refreshSessions();
+        });
+
+        async function refreshSessions() {
+            try {
+                const response = await axios.get(`${API_BASE}/extraction-sessions?limit=50`);
+                sessions = response.data.sessions;
+                displaySessions(sessions);
+            } catch (error) {
+                console.error('Error fetching sessions:', error);
+                document.getElementById('sessionsGrid').innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <p class="text-red-600 font-medium">❌ Error loading sessions</p>
+                        <p class="text-gray-500 text-sm mt-2">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displaySessions(sessions) {
+            const grid = document.getElementById('sessionsGrid');
+
+            if (sessions.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-12">
+                        <div class="text-6xl mb-4">📭</div>
+                        <p class="text-gray-600 text-lg font-medium">No extraction sessions yet</p>
+                        <p class="text-gray-500 text-sm mt-2">Run a pain point extraction to create your first scorecard</p>
+                        <a href="index.html" class="inline-block mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg transition">
+                            Go to Main Dashboard
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = sessions.map(session => {
+                const statusColors = {
+                    'completed': 'bg-green-100 text-green-800 border-green-200',
+                    'in_progress': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                    'failed': 'bg-red-100 text-red-800 border-red-200'
+                };
+                const statusClass = statusColors[session.status] || 'bg-gray-100 text-gray-800 border-gray-200';
+
+                const date = new Date(session.started_at).toLocaleString();
+                const duration = session.duration_seconds ? `${session.duration_seconds}s` : 'N/A';
+
+                return `
+                    <div class="border border-gray-200 rounded-lg p-6 hover:shadow-lg transition cursor-pointer" onclick="viewScorecard(${session.id})">
+                        <!-- Header -->
+                        <div class="flex justify-between items-start mb-4">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-gray-900 mb-1">${session.session_name}</h3>
+                                <p class="text-sm text-gray-500">${date}</p>
+                            </div>
+                            <span class="px-3 py-1 text-xs font-semibold rounded-full border ${statusClass}">
+                                ${session.status}
+                            </span>
+                        </div>
+
+                        <!-- Metrics -->
+                        <div class="grid grid-cols-2 gap-3 mb-4">
+                            <div class="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                                <div class="text-blue-600 text-xs font-medium mb-1">Pain Points</div>
+                                <div class="text-2xl font-bold text-blue-900">${session.pain_points_extracted || 0}</div>
+                            </div>
+                            <div class="bg-purple-50 rounded-lg p-3 border border-purple-100">
+                                <div class="text-purple-600 text-xs font-medium mb-1">Items</div>
+                                <div class="text-2xl font-bold text-purple-900">${session.items_processed || 0}</div>
+                            </div>
+                        </div>
+
+                        <!-- Stats -->
+                        <div class="space-y-2 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Avg Score:</span>
+                                <span class="font-semibold text-gray-900">${session.avg_opportunity_score ? session.avg_opportunity_score.toFixed(1) : 'N/A'}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Critical/High:</span>
+                                <span class="font-semibold text-red-600">${(session.critical_severity_count || 0) + (session.high_severity_count || 0)}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Duration:</span>
+                                <span class="font-semibold text-gray-900">${duration}</span>
+                            </div>
+                        </div>
+
+                        <!-- View Button -->
+                        <button class="w-full mt-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                            📊 View Full Scorecard
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function viewScorecard(sessionId) {
+            try {
+                const response = await axios.get(`${API_BASE}/extraction-sessions/${sessionId}/scorecard`);
+                const scorecard = response.data.scorecard;
+                displayScorecard(scorecard);
+                document.getElementById('scorecardModal').classList.remove('hidden');
+                document.getElementById('scorecardModal').classList.add('flex');
+            } catch (error) {
+                console.error('Error fetching scorecard:', error);
+                alert(`❌ Error loading scorecard: ${error.message}`);
+            }
+        }
+
+        function displayScorecard(scorecard) {
+            // Update header
+            document.getElementById('scorecardTitle').textContent = scorecard.session_name;
+            document.getElementById('scorecardDate').textContent = `${scorecard.date} • ${scorecard.duration}`;
+
+            // Update summary cards
+            document.getElementById('scorecardTotal').textContent = scorecard.total_pain_points;
+            document.getElementById('scorecardAnalyzed').textContent = scorecard.items_analyzed;
+            document.getElementById('scorecardAvgScore').textContent = scorecard.avg_opportunity_score;
+            document.getElementById('scorecardCritical').textContent = (scorecard.critical_count + scorecard.high_count);
+
+            // Update category chart
+            const categoryCanvas = document.getElementById('categoryChartModal');
+            if (categoryChartModal) categoryChartModal.destroy();
+
+            const categoryLabels = Object.keys(scorecard.category_breakdown || {});
+            const categoryData = Object.values(scorecard.category_breakdown || {});
+
+            categoryChartModal = new Chart(categoryCanvas, {
+                type: 'bar',
+                data: {
+                    labels: categoryLabels,
+                    datasets: [{
+                        label: 'Pain Points',
+                        data: categoryData,
+                        backgroundColor: 'rgba(147, 51, 234, 0.8)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Update severity chart
+            const severityCanvas = document.getElementById('severityChartModal');
+            if (severityChartModal) severityChartModal.destroy();
+
+            severityChartModal = new Chart(severityCanvas, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [
+                            scorecard.severity_breakdown?.critical || 0,
+                            scorecard.severity_breakdown?.high || 0,
+                            scorecard.severity_breakdown?.medium || 0,
+                            scorecard.severity_breakdown?.low || 0
+                        ],
+                        backgroundColor: [
+                            'rgba(239, 68, 68, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(59, 130, 246, 0.8)',
+                            'rgba(156, 163, 175, 0.8)'
+                        ]
+                    }]
+                },
+                options: { responsive: true }
+            });
+
+            // Display top opportunities
+            const topOpportunitiesContainer = document.getElementById('topOpportunities');
+            topOpportunitiesContainer.innerHTML = scorecard.top_opportunities.map((opp, index) => {
+                const severityColors = {
+                    critical: 'border-red-500 bg-red-50',
+                    high: 'border-orange-500 bg-orange-50',
+                    medium: 'border-blue-500 bg-blue-50',
+                    low: 'border-gray-500 bg-gray-50'
+                };
+                const borderColor = severityColors[opp.severity] || 'border-gray-300 bg-gray-50';
+
+                return `
+                    <div class="border-l-4 ${borderColor} rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-2">
+                            <h5 class="font-semibold text-gray-900 text-lg">
+                                #${index + 1} - ${opp.problem}
+                            </h5>
+                            <span class="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-semibold ml-4">
+                                ${opp.score}/100
+                            </span>
+                        </div>
+                        <div class="flex gap-3 text-sm">
+                            <span class="px-2 py-1 bg-white rounded border border-gray-200 text-gray-700">
+                                📂 ${opp.category}
+                            </span>
+                            <span class="px-2 py-1 bg-white rounded border border-gray-200 text-gray-700">
+                                ⚠️ ${opp.severity}
+                            </span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function closeScorecardModal() {
+            document.getElementById('scorecardModal').classList.add('hidden');
+            document.getElementById('scorecardModal').classList.remove('flex');
+        }
+    </script>
+</body>
+</html>

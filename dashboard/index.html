@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market Research Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-50">
+    <div class="min-h-screen">
+        <!-- Header -->
+        <header class="bg-white shadow-sm">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h1 class="text-3xl font-bold text-gray-900">🔍 Market Research Dashboard</h1>
+                        <p class="text-gray-600 mt-1">Discover customer pain points automatically</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <a href="scorecards.html" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition inline-flex items-center gap-2">
+                            📊 View Scorecards
+                        </a>
+                        <button onclick="refreshData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                            🔄 Refresh
+                        </button>
+                        <button onclick="showScrapingModal()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                            + Scrape Reddit
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm text-gray-600 font-medium">Total Pain Points</div>
+                    <div class="text-3xl font-bold text-gray-900 mt-2" id="totalPainPoints">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm text-gray-600 font-medium">High Severity</div>
+                    <div class="text-3xl font-bold text-red-600 mt-2" id="highSeverity">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm text-gray-600 font-medium">Avg Opportunity</div>
+                    <div class="text-3xl font-bold text-green-600 mt-2" id="avgOpportunity">-</div>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="text-sm text-gray-600 font-medium">Top Category</div>
+                    <div class="text-3xl font-bold text-purple-600 mt-2" id="topCategory">-</div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Pain Points by Category</h3>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Severity Distribution</h3>
+                    <canvas id="severityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Discover Subreddits Section -->
+            <div class="bg-white rounded-lg shadow mb-8">
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-semibold">🔥 Discover Trending Subreddits</h3>
+                        <button onclick="loadTrendingSubreddits()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                            🔍 Load Trending
+                        </button>
+                    </div>
+                </div>
+                <div id="trendingContainer" class="p-6 hidden">
+                    <!-- Trending subreddits will be loaded here -->
+                </div>
+            </div>
+
+            <!-- Pain Points Table -->
+            <div class="bg-white rounded-lg shadow">
+                <div class="p-6 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <div class="flex gap-4 items-center">
+                            <button id="viewPainPointsBtn" onclick="switchView('painpoints')" class="text-lg font-semibold text-blue-600 border-b-2 border-blue-600 pb-1">
+                                AI-Extracted Pain Points
+                            </button>
+                            <button id="viewRawDataBtn" onclick="switchView('rawdata')" class="text-lg font-semibold text-gray-400 hover:text-gray-600 pb-1">
+                                Raw Scraped Data
+                            </button>
+                            <button id="extractPainPointsBtn" onclick="extractPainPointsFromRaw()" class="hidden bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                                🧠 Analyze & Extract Pain Points
+                            </button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="exportPainPoints('csv')" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition">
+                                📥 Export CSV
+                            </button>
+                            <button onclick="exportPainPoints('json')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium transition">
+                                📥 Export JSON
+                            </button>
+                            <select id="categoryFilter" onchange="filterPainPoints()" class="border border-gray-300 rounded-lg px-3 py-2">
+                                <option value="">All Categories</option>
+                                <option value="pricing">Pricing</option>
+                                <option value="features">Features</option>
+                                <option value="usability">Usability</option>
+                                <option value="performance">Performance</option>
+                                <option value="support">Support</option>
+                            </select>
+                            <select id="severityFilter" onchange="filterPainPoints()" class="border border-gray-300 rounded-lg px-3 py-2">
+                                <option value="">All Severity</option>
+                                <option value="critical">Critical</option>
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div id="painPointsTableContainer" class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Problem</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Severity</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tags</th>
+                            </tr>
+                        </thead>
+                        <tbody id="painPointsTable" class="divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="5" class="px-6 py-4 text-center text-gray-500">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="rawDataTable" class="overflow-x-auto hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Content</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Author</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Link</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rawDataTableBody" class="divide-y divide-gray-200">
+                            <tr>
+                                <td colspan="6" class="px-6 py-4 text-center text-gray-500">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Metadata Modal -->
+    <div id="metadataModal" class="fixed inset-0 bg-black bg-opacity-50 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-3xl w-full mx-4 max-h-[85vh] overflow-y-auto">
+            <div class="flex justify-between items-start mb-6">
+                <div id="metadataHeader" class="flex-1">
+                    <!-- Header will be injected here -->
+                </div>
+                <button onclick="closeMetadataModal()" class="text-gray-400 hover:text-gray-600 text-3xl font-bold leading-none ml-4">&times;</button>
+            </div>
+            <div id="metadataContent" class="space-y-5">
+                <!-- Content will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Modal -->
+    <div id="progressModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <div class="text-center">
+                <div class="mb-6">
+                    <div class="text-6xl mb-4">🧠</div>
+                    <h3 class="text-2xl font-bold text-gray-900 mb-2">Analyzing Pain Points</h3>
+                    <p class="text-gray-600">Claude AI is extracting structured insights...</p>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="mb-6">
+                    <div class="flex justify-between text-sm text-gray-600 mb-2">
+                        <span id="progressText">Processing...</span>
+                        <span id="progressPercentage">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                        <div id="progressBar" class="bg-gradient-to-r from-purple-600 to-blue-600 h-4 rounded-full transition-all duration-500 ease-out" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <div class="text-2xl font-bold text-blue-600" id="itemsProcessed">0</div>
+                        <div class="text-xs text-gray-600">Processed</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4">
+                        <div class="text-2xl font-bold text-purple-600" id="itemsTotal">0</div>
+                        <div class="text-xs text-gray-600">Total Items</div>
+                    </div>
+                </div>
+
+                <!-- Estimated Time -->
+                <div class="text-sm text-gray-500">
+                    <span id="estimatedTime">Calculating...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scraping Modal -->
+    <div id="scrapingModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-2xl font-bold mb-4">🕷️ Advanced Reddit Scraper</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Subreddit</label>
+                    <input type="text" id="subredditInput" placeholder="saas" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                </div>
+
+                <!-- NEW: Sort Type -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">
+                        Sort By
+                        <span class="text-xs text-gray-500">(NEW!)</span>
+                    </label>
+                    <select id="sortTypeInput" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                        <option value="hot">🔥 Hot - Trending posts</option>
+                        <option value="new">🆕 New - Latest posts</option>
+                        <option value="top">⭐ Top - Highest rated</option>
+                        <option value="controversial">💬 Controversial - Most debated</option>
+                        <option value="rising">📈 Rising - Gaining traction</option>
+                    </select>
+                </div>
+
+                <!-- NEW: Time Filter -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Time Filter (for Top/Controversial)</label>
+                    <select id="timeFilterInput" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                        <option value="day">Today</option>
+                        <option value="week" selected>This Week</option>
+                        <option value="month">This Month</option>
+                        <option value="year">This Year</option>
+                        <option value="all">All Time</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Keyword Presets</label>
+                    <select id="keywordPreset" onchange="applyKeywordPreset()" class="w-full border border-gray-300 rounded-lg px-4 py-2 mb-2">
+                        <option value="">Choose a template...</option>
+                        <option value="pricing">💰 Pricing Complaints</option>
+                        <option value="features">✨ Feature Requests</option>
+                        <option value="performance">⚡ Performance Issues</option>
+                        <option value="support">🎧 Support Problems</option>
+                        <option value="bugs">🐛 Bugs & Errors</option>
+                        <option value="ux">🎨 UX/Usability</option>
+                        <option value="integration">🔌 Integration Issues</option>
+                    </select>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Keywords (comma-separated)</label>
+                    <input type="text" id="keywordsInput" placeholder="Leave empty for auto-detection" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                    <p class="text-xs text-gray-500 mt-1">💡 Use presets above or enter custom keywords</p>
+                </div>
+
+                <!-- NEW: Include Comments -->
+                <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="checkbox" id="includeCommentsInput" class="w-5 h-5 text-blue-600 rounded">
+                        <span class="ml-3">
+                            <span class="text-sm font-medium text-gray-900">Include Comments</span>
+                            <span class="text-xs text-blue-600 ml-2">(NEW!)</span>
+                            <p class="text-xs text-gray-600 mt-1">Scrape comments from posts for richer pain points</p>
+                        </span>
+                    </label>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Post Limit</label>
+                    <input type="number" id="limitInput" value="10" min="1" max="100" class="w-full border border-gray-300 rounded-lg px-4 py-2">
+                </div>
+
+                <div class="flex gap-3 mt-6">
+                    <button onclick="startScraping()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                        Start Scraping
+                    </button>
+                    <button onclick="closeScrapingModal()" class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded-lg font-medium transition">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+            <div id="scrapingStatus" class="mt-4 hidden">
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <p class="text-blue-800 font-medium">Scraping in progress...</p>
+                    <p class="text-blue-600 text-sm mt-1">This may take a moment</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

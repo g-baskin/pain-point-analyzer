@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Explorer - Pain Point Analyzer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-gray-800 min-h-screen text-white">
+    <!-- Header -->
+    <div class="bg-gray-800/50 backdrop-blur-md border-b border-gray-700 sticky top-0 z-10">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                        🔍 Scraped Data Explorer
+                    </h1>
+                    <p class="text-gray-400 text-sm mt-1">Research and analyze all scraped posts and comments</p>
+                </div>
+                <div class="flex gap-2">
+                    <a href="index.html" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition">
+                        🏠 Dashboard
+                    </a>
+                    <a href="explorer.html" class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium">
+                        🔍 Data Explorer
+                    </a>
+                    <a href="scorecards.html" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition">
+                        📊 Scorecards
+                    </a>
+                    <button onclick="location.reload()" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-medium transition">
+                        🔄 Refresh
+                    </button>
+                    <a href="index.html#scrape" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                        + Scrape Reddit
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-6 py-8">
+        <!-- Filters & Search -->
+        <div class="bg-gray-800 rounded-xl p-6 mb-6 shadow-2xl border border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <!-- Search -->
+                <div class="md:col-span-2">
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Search Content</label>
+                    <input
+                        type="text"
+                        id="searchInput"
+                        placeholder="Search in posts and comments..."
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onkeyup="if(event.key === 'Enter') applyFilters()"
+                    >
+                </div>
+
+                <!-- Type Filter -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Type</label>
+                    <select
+                        id="typeFilter"
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                        onchange="applyFilters()"
+                    >
+                        <option value="">All Types</option>
+                        <option value="post">Posts</option>
+                        <option value="comment">Comments</option>
+                    </select>
+                </div>
+
+                <!-- Subreddit Filter -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Subreddit</label>
+                    <select
+                        id="subredditFilter"
+                        class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:ring-2 focus:ring-blue-500"
+                        onchange="applyFilters()"
+                    >
+                        <option value="">All Subreddits</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between mt-4">
+                <div class="text-gray-400 text-sm">
+                    <span id="totalCount">0</span> items found
+                </div>
+                <button
+                    onclick="clearFilters()"
+                    class="text-sm text-blue-400 hover:text-blue-300 font-medium transition"
+                >
+                    Clear Filters
+                </button>
+            </div>
+        </div>
+
+        <!-- Data Grid -->
+        <div id="dataGrid" class="space-y-4">
+            <!-- Items will be loaded here -->
+        </div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="flex items-center justify-between mt-8 bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <button
+                id="prevBtn"
+                onclick="previousPage()"
+                class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                ← Previous
+            </button>
+            <div class="text-gray-400">
+                Page <span id="currentPage">1</span> of <span id="totalPages">1</span>
+            </div>
+            <button
+                id="nextBtn"
+                onclick="nextPage()"
+                class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                Next →
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-gray-800 rounded-xl p-8 shadow-2xl border border-gray-700">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+                <p class="text-gray-300 mt-4">Loading data...</p>
+            </div>
+        </div>
+
+        <!-- Item Detail Modal -->
+        <div id="detailModal" class="hidden fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4 overflow-y-auto">
+            <div class="bg-gray-800 rounded-xl shadow-2xl border border-gray-700 max-w-4xl w-full my-8">
+                <!-- Modal content will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentPage = 1;
+        const itemsPerPage = 20;
+        let totalItems = 0;
+        let subreddits = [];
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadData();
+        });
+
+        async function loadData() {
+            showLoading(true);
+
+            try {
+                const searchTerm = document.getElementById('searchInput').value;
+                const sourceType = document.getElementById('typeFilter').value;
+                const subreddit = document.getElementById('subredditFilter').value;
+
+                const offset = (currentPage - 1) * itemsPerPage;
+
+                let url = `${API_BASE}/raw-data?limit=${itemsPerPage}&offset=${offset}`;
+                if (searchTerm) url += `&search=${encodeURIComponent(searchTerm)}`;
+                if (sourceType) url += `&source_type=${sourceType}`;
+                if (subreddit) url += `&subreddit=${encodeURIComponent(subreddit)}`;
+
+                const response = await axios.get(url);
+                const data = response.data;
+
+                totalItems = data.total || 0;
+                subreddits = data.subreddits || [];
+
+                // Update subreddit filter dropdown
+                updateSubredditFilter();
+
+                // Display items
+                displayItems(data.items || []);
+
+                // Update pagination
+                updatePagination();
+
+            } catch (error) {
+                console.error('Error loading data:', error);
+                console.error('Error details:', error.response?.data);
+                document.getElementById('dataGrid').innerHTML = `
+                    <div class="bg-red-900/20 border border-red-700 rounded-xl p-6 text-center">
+                        <p class="text-red-400 text-lg font-semibold mb-2">❌ Error loading data</p>
+                        <p class="text-red-300 text-sm">${error.message}</p>
+                        <p class="text-gray-400 text-xs mt-2">Check the console for more details</p>
+                    </div>
+                `;
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function updateSubredditFilter() {
+            const select = document.getElementById('subredditFilter');
+            const currentValue = select.value;
+
+            select.innerHTML = '<option value="">All Subreddits</option>';
+
+            if (Array.isArray(subreddits) && subreddits.length > 0) {
+                subreddits.forEach(sub => {
+                    if (sub) {
+                        const option = document.createElement('option');
+                        option.value = sub;
+                        option.textContent = `r/${sub}`;
+                        select.appendChild(option);
+                    }
+                });
+            }
+
+            select.value = currentValue;
+        }
+
+        function displayItems(items) {
+            const grid = document.getElementById('dataGrid');
+            document.getElementById('totalCount').textContent = totalItems;
+
+            if (items.length === 0) {
+                grid.innerHTML = `
+                    <div class="bg-gray-800 rounded-xl p-12 text-center border border-gray-700">
+                        <div class="text-6xl mb-4">📭</div>
+                        <p class="text-gray-400 text-lg">No data found</p>
+                        <p class="text-gray-500 text-sm mt-2">Try adjusting your filters or run a new scrape</p>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = items.map(item => {
+                const typeIcon = item.source_type === 'post' ? '📝' : '💬';
+                const typeColor = item.source_type === 'post' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300';
+                const contentPreview = item.content.substring(0, 200) + (item.content.length > 200 ? '...' : '');
+
+                return `
+                    <div class="bg-gray-800 rounded-xl p-6 border border-gray-700 hover:border-gray-600 transition cursor-pointer" onclick="viewDetail(${item.id})">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl">${typeIcon}</span>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="${typeColor} px-2 py-1 rounded text-xs font-semibold uppercase">
+                                            ${item.source_type}
+                                        </span>
+                                        ${item.subreddit ? `<span class="text-gray-400 text-sm">r/${item.subreddit}</span>` : ''}
+                                    </div>
+                                    <p class="text-gray-500 text-xs mt-1">by u/${item.author || 'unknown'}</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                ${item.score !== null ? `<div class="text-yellow-400 text-sm font-semibold">⬆ ${item.score}</div>` : ''}
+                                <div class="text-gray-500 text-xs mt-1">${formatDate(item.created_at)}</div>
+                            </div>
+                        </div>
+
+                        <p class="text-gray-300 leading-relaxed mb-3">${contentPreview}</p>
+
+                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                            <span>ID: ${item.source_id}</span>
+                            ${item.url ? `<a href="${item.url}" target="_blank" class="text-blue-400 hover:text-blue-300" onclick="event.stopPropagation()">🔗 View Source</a>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updatePagination() {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            document.getElementById('currentPage').textContent = currentPage;
+            document.getElementById('totalPages').textContent = totalPages || 1;
+
+            document.getElementById('prevBtn').disabled = currentPage === 1;
+            document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+        }
+
+        function applyFilters() {
+            currentPage = 1;
+            loadData();
+        }
+
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('typeFilter').value = '';
+            document.getElementById('subredditFilter').value = '';
+            applyFilters();
+        }
+
+        function previousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadData();
+                window.scrollTo(0, 0);
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                loadData();
+                window.scrollTo(0, 0);
+            }
+        }
+
+        async function viewDetail(itemId) {
+            try {
+                const response = await axios.get(`${API_BASE}/raw-data`);
+                const item = response.data.items.find(i => i.id === itemId);
+
+                if (!item) {
+                    alert('Item not found');
+                    return;
+                }
+
+                const modal = document.getElementById('detailModal');
+                const typeIcon = item.source_type === 'post' ? '📝' : '💬';
+                const typeColor = item.source_type === 'post' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300';
+
+                modal.querySelector('.bg-gray-800').innerHTML = `
+                    <div class="p-6 border-b border-gray-700">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <span class="text-3xl">${typeIcon}</span>
+                                <div>
+                                    <span class="${typeColor} px-3 py-1 rounded text-sm font-semibold uppercase">
+                                        ${item.source_type}
+                                    </span>
+                                    <p class="text-gray-400 text-sm mt-1">r/${item.subreddit || 'unknown'} • u/${item.author || 'unknown'}</p>
+                                </div>
+                            </div>
+                            <button onclick="closeDetailModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+                        </div>
+                    </div>
+
+                    <div class="p-6 max-h-[60vh] overflow-y-auto">
+                        <div class="prose prose-invert max-w-none">
+                            <p class="text-gray-200 leading-relaxed whitespace-pre-wrap">${item.content}</p>
+                        </div>
+                    </div>
+
+                    <div class="p-6 bg-gray-900/50 border-t border-gray-700 rounded-b-xl">
+                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            ${item.score !== null ? `
+                            <div>
+                                <p class="text-gray-500 mb-1">Score</p>
+                                <p class="text-yellow-400 font-semibold">⬆ ${item.score}</p>
+                            </div>
+                            ` : ''}
+                            <div>
+                                <p class="text-gray-500 mb-1">Posted</p>
+                                <p class="text-gray-300">${formatDate(item.created_at)}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 mb-1">Scraped</p>
+                                <p class="text-gray-300">${formatDate(item.scraped_at)}</p>
+                            </div>
+                            <div>
+                                <p class="text-gray-500 mb-1">Source ID</p>
+                                <p class="text-gray-300 font-mono text-xs">${item.source_id}</p>
+                            </div>
+                        </div>
+
+                        ${item.url ? `
+                        <div class="mt-4">
+                            <a href="${item.url}" target="_blank" class="inline-block bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition">
+                                🔗 View on Reddit
+                            </a>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+
+                modal.classList.remove('hidden');
+            } catch (error) {
+                console.error('Error loading detail:', error);
+                alert('Error loading item details');
+            }
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.add('hidden');
+        }
+
+        function showLoading(show) {
+            const indicator = document.getElementById('loadingIndicator');
+            if (show) {
+                indicator.classList.remove('hidden');
+            } else {
+                indicator.classList.add('hidden');
+            }
+        }
+
+        function formatDate(dateString) {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+
+            if (diffMins < 60) return `${diffMins}m ago`;
+            if (diffHours < 24) return `${diffHours}h ago`;
+            if (diffDays < 7) return `${diffDays}d ago`;
+
+            return date.toLocaleDateString();
+        }
+
+        // Close modal on ESC key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeDetailModal();
+            }
+        });
+
+        // Close modal on background click
+        document.getElementById('detailModal').addEventListener('click', (e) => {
+            if (e.target.id === 'detailModal') {
+                closeDetailModal();
+            }
+        });
+    </script>
+</body>
+</html>

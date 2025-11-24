@@ -590,24 +590,75 @@ def get_pain_points(
 
     return pain_points
 
-@app.get("/raw-data", response_model=List[RawDataResponse])
+@app.get("/raw-data")
 def get_raw_data(
-    source: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    source_type: Optional[str] = None,  # 'post' or 'comment'
     subreddit: Optional[str] = None,
-    limit: int = 100,
+    search: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
-    """Get raw scraped data with optional filters."""
-    query = db.query(RawData)
+    """
+    Get raw scraped data with filtering and pagination.
 
-    if source:
-        query = query.filter(RawData.source == source)
+    Args:
+        limit: Max items to return
+        offset: Number of items to skip
+        source_type: Filter by 'post' or 'comment'
+        subreddit: Filter by subreddit name
+        search: Search in content
+    """
+    query = db.query(RawData).order_by(RawData.created_at.desc())
+
+    # Apply filters
+    if source_type:
+        if source_type == 'post':
+            query = query.filter(RawData.source == 'reddit')
+        elif source_type == 'comment':
+            query = query.filter(RawData.source == 'reddit_comment')
+
     if subreddit:
-        query = query.filter(RawData.subreddit == subreddit)
+        query = query.filter(RawData.subreddit.ilike(f'%{subreddit}%'))
 
-    raw_data = query.order_by(RawData.scraped_at.desc()).limit(limit).all()
+    if search:
+        query = query.filter(RawData.content.ilike(f'%{search}%'))
 
-    return raw_data
+    # Get total count before pagination
+    total = query.count()
+
+    # Apply pagination
+    items = query.offset(offset).limit(limit).all()
+
+    # Get unique subreddits for filter dropdown
+    subreddits = db.query(RawData.subreddit).distinct().filter(
+        RawData.subreddit.isnot(None)
+    ).all()
+    subreddit_list = [s[0] for s in subreddits if s[0]]
+
+    return {
+        "status": "success",
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "subreddits": subreddit_list,
+        "items": [
+            {
+                "id": item.id,
+                "source": item.source,
+                "source_type": "comment" if "comment" in item.source.lower() else "post",
+                "source_id": item.source_id,
+                "content": item.content,
+                "author": item.author,
+                "url": item.url,
+                "subreddit": item.subreddit,
+                "score": item.source_metadata.get('score') if item.source_metadata else None,
+                "created_at": item.created_at.isoformat() if item.created_at else None,
+                "scraped_at": item.scraped_at.isoformat() if item.scraped_at else None
+            }
+            for item in items
+        ]
+    }
 
 @app.get("/stats")
 def get_stats(db: Session = Depends(get_db)):

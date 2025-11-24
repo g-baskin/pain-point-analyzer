@@ -664,32 +664,77 @@ async function viewMetadata(subreddit) {
 }
 
 async function quickScrape(subreddit) {
-    if (!confirm(`Start scraping r/${subreddit}?\n\nThis will scrape 20 posts with complaint keywords.`)) {
+    if (!confirm(`Start scraping r/${subreddit}?\n\nThis will scrape 20 posts with complaint keywords and comments.\n\nEstimated time: 2-5 minutes`)) {
         return;
     }
+
+    // Create loading indicator
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'scrapeLoading';
+    loadingDiv.className = 'fixed top-4 right-4 bg-blue-600 text-white px-6 py-4 rounded-lg shadow-2xl z-50 flex items-center gap-3';
+    loadingDiv.innerHTML = `
+        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+        <div>
+            <div class="font-semibold">Scraping r/${subreddit}...</div>
+            <div class="text-sm text-blue-100" id="scrapeStatus">Finding posts with complaints</div>
+        </div>
+    `;
+    document.body.appendChild(loadingDiv);
+
+    const updateStatus = (text) => {
+        const statusEl = document.getElementById('scrapeStatus');
+        if (statusEl) statusEl.textContent = text;
+    };
 
     try {
         // Use default complaint keywords
         const keywords = ['frustrated', 'hate', 'terrible', 'worst', 'awful', 'wish there was'];
 
+        // Step 1: Scrape with increased timeout (5 minutes)
+        updateStatus('Scraping posts and comments...');
         const scrapeResponse = await axios.post(`${API_BASE}/scrape/reddit`, {
             source: 'reddit',
             subreddit,
             keywords,
             limit: 20
+        }, {
+            timeout: 300000  // 5 minutes
         });
 
-        alert(`✅ Scraped ${scrapeResponse.data.items_scraped} posts from r/${subreddit}`);
+        updateStatus(`Scraped ${scrapeResponse.data.items_scraped} items. Extracting pain points...`);
 
-        // Extract pain points
-        const extractResponse = await axios.post(`${API_BASE}/extract/pain-points?limit=20`);
-        alert(`🧠 Extracted ${extractResponse.data.pain_points_extracted} pain points`);
+        // Step 2: Extract pain points with increased timeout (10 minutes)
+        const extractResponse = await axios.post(`${API_BASE}/extract/pain-points?limit=20`, null, {
+            timeout: 600000  // 10 minutes
+        });
+
+        // Remove loading indicator
+        loadingDiv.remove();
+
+        alert(`✅ Success!\n\n📥 Scraped: ${scrapeResponse.data.items_scraped} items\n🧠 Extracted: ${extractResponse.data.pain_points_extracted} pain points\n\nRefreshing dashboard...`);
 
         // Refresh the dashboard
-        refreshData();
+        await refreshData();
+
     } catch (error) {
+        // Remove loading indicator
+        loadingDiv.remove();
+
         console.error('Error scraping:', error);
-        alert('❌ Error scraping: ' + (error.response?.data?.detail || error.message));
+
+        // Better error messages
+        let errorMsg = 'Unknown error';
+        if (error.code === 'ECONNABORTED') {
+            errorMsg = 'Request timed out. The operation is taking longer than expected. Please try with fewer items or check the server logs.';
+        } else if (error.message === 'Network Error') {
+            errorMsg = 'Network connection lost. The server may still be processing. Please refresh the page in a few minutes.';
+        } else if (error.response?.data?.detail) {
+            errorMsg = error.response.data.detail;
+        } else if (error.message) {
+            errorMsg = error.message;
+        }
+
+        alert('❌ Error during scraping:\n\n' + errorMsg);
     }
 }
 
